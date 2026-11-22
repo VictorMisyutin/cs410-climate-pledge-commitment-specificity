@@ -1,11 +1,3 @@
-"""Extract commitment sentences from report PDFs and save them to CSVs.
-
-Usage:
-    python scripts/extract_commitments.py data/reports            # every PDF in the folder
-    python scripts/extract_commitments.py "data/reports/*.pdf"    # wildcard (works on Windows too)
-    python scripts/extract_commitments.py "data/reports/some report.pdf"
-"""
-
 import csv
 import glob
 import sys
@@ -13,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from commitments import is_commitment  # noqa: E402
-from extract import pdf_to_sentences  # noqa: E402
+from commitments import is_commitment
+from extract import pdf_to_sentences
 
 
 def find_pdfs(args):
@@ -41,14 +33,18 @@ for pdf_path in pdfs:
 
     print(f"\n=== {pdf_path.name} ===")
     print(f"{len(sentences)} sentences extracted, {len(commitments)} look like commitments:\n")
+    
     for page, s in commitments:
         print(f"  [p.{page}] {s}")
 
     out = out_dir / f"{pdf_path.stem}_commitments.csv"
+    
     with open(out, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["page", "sentence"])
         writer.writerows(commitments)
+    
     print(f"\nSaved to {out}")
+    
     
     
