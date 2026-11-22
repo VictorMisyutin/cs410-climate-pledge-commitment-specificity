@@ -2,21 +2,27 @@
 
 import re
 
-import pdfplumber
+import pymupdf
 
 
 def read_pdf(path):
-    """Return a list of (page_number, text) for each page."""
+    """Return a list of (page_number, [text blocks]) for each page.
+
+    PyMuPDF groups text into blocks (paragraphs, bullet items, table cells),
+    so columns in multi-column layouts stay separate instead of being
+    read straight across the page.
+    """
     pages = []
-    with pdfplumber.open(path) as pdf:
-        for i, page in enumerate(pdf.pages, start=1):
-            pages.append((i, page.extract_text() or ""))
+    with pymupdf.open(path) as doc:
+        for i, page in enumerate(doc, start=1):
+            blocks = page.get_text("blocks")
+            texts = [b[4] for b in blocks if b[6] == 0]  # b[6] == 0 means a text block (not an image)
+            pages.append((i, texts))
     return pages
 
 
 def clean_text(text):
     """Join lines that were wrapped by the PDF layout and drop obvious noise."""
-    text = re.sub(r"\(cid:\d+\)", " ", text)       # unmapped glyphs (often bullets)
     text = re.sub(r"-\n(?=[a-z])", "", text)        # re-join hyphenated words
     lines = [ln.strip() for ln in text.splitlines()]
     lines = [ln for ln in lines if ln and not ln.isdigit()]  # drop page numbers
@@ -26,17 +32,24 @@ def clean_text(text):
 def split_sentences(text):
     """Simple rule-based splitter: break after . ! ? when followed by a capital letter.
 
-    TODO: handle abbreviations like "e.g." and "Inc.", bullet lists without
-    periods, and section headings that get glued onto the next sentence.
+    TODO: handle abbreviations like "e.g." and "Inc."
     """
     parts = re.split(r"(?<=[.!?])\s+(?=[A-Z])", text)
     return [p.strip() for p in parts if len(p.split()) >= 5]
 
 
-def pdf_to_sentences(path):
-    """Return a list of (page_number, sentence)."""
+def pdf_to_sentences(path, max_words=60):
+    """Return a list of (page_number, sentence).
+
+    Each text block is split on bullet characters and then into sentences.
+    Anything longer than max_words is almost always a table or a run of
+    merged bullets, so it is dropped.
+    """
     result = []
-    for page_num, text in read_pdf(path):
-        for sentence in split_sentences(clean_text(text)):
-            result.append((page_num, sentence))
+    for page_num, blocks in read_pdf(path):
+        for block in blocks:
+            for piece in re.split(r"\s*[•●▪]\s*", clean_text(block)):
+                for sentence in split_sentences(piece):
+                    if len(sentence.split()) <= max_words:
+                        result.append((page_num, sentence))
     return result

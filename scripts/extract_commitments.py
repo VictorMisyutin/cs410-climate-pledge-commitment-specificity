@@ -1,9 +1,13 @@
-"""Extract commitment sentences from a report PDF and save them to a CSV.
+"""Extract commitment sentences from report PDFs and save them to CSVs.
 
-Usage: python scripts/extract_commitments.py data/reports/some_report.pdf
+Usage:
+    python scripts/extract_commitments.py data/reports            # every PDF in the folder
+    python scripts/extract_commitments.py "data/reports/*.pdf"    # wildcard (works on Windows too)
+    python scripts/extract_commitments.py "data/reports/some report.pdf"
 """
 
 import csv
+import glob
 import sys
 from pathlib import Path
 
@@ -12,18 +16,39 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from commitments import is_commitment  # noqa: E402
 from extract import pdf_to_sentences  # noqa: E402
 
-pdf_path = sys.argv[1]
-sentences = pdf_to_sentences(pdf_path)
-commitments = [(page, s) for page, s in sentences if is_commitment(s)]
 
-print(f"{len(sentences)} sentences extracted, {len(commitments)} look like commitments:\n")
-for page, s in commitments:
-    print(f"  [p.{page}] {s}")
+def find_pdfs(args):
+    pdfs = []
+    for arg in args:
+        p = Path(arg)
+        if p.is_dir():
+            pdfs += sorted(p.glob("*.pdf"))
+        else:
+            pdfs += [Path(m) for m in sorted(glob.glob(arg)) if m.lower().endswith(".pdf")]
+    return pdfs
 
-out = Path("outputs") / f"{Path(pdf_path).stem}_commitments.csv"
-out.parent.mkdir(exist_ok=True)
-with open(out, "w", newline="") as f:
-    writer = csv.writer(f)
-    writer.writerow(["page", "sentence"])
-    writer.writerows(commitments)
-print(f"\nSaved to {out}")
+
+pdfs = find_pdfs(sys.argv[1:])
+if not pdfs:
+    sys.exit("No PDFs found. Usage: python scripts/extract_commitments.py data/reports")
+
+out_dir = Path("outputs")
+out_dir.mkdir(exist_ok=True)
+
+for pdf_path in pdfs:
+    sentences = pdf_to_sentences(pdf_path)
+    commitments = [(page, s) for page, s in sentences if is_commitment(s)]
+
+    print(f"\n=== {pdf_path.name} ===")
+    print(f"{len(sentences)} sentences extracted, {len(commitments)} look like commitments:\n")
+    for page, s in commitments:
+        print(f"  [p.{page}] {s}")
+
+    out = out_dir / f"{pdf_path.stem}_commitments.csv"
+    with open(out, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["page", "sentence"])
+        writer.writerows(commitments)
+    print(f"\nSaved to {out}")
+    
+    
